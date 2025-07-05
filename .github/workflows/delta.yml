@@ -9,7 +9,7 @@ jobs:
 
     env:
       ARTIFACT_FOLDER: app/target  # Adjust for your project structure
-      VERACODE_BASELINE_PATH: baseline.json
+      VERACODE_BASELINE_PATH: baseline.json # baseline.json = mitigations context || results.json = only fail on new findings
       VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates # Adjust for your project structure
       VERACODE_BASELINE_BRANCH: main
 
