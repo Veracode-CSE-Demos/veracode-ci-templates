@@ -1,6 +1,6 @@
-# Veracode Pipeline Scan with Shared Baseline Management (GitHub Version)
+# Veracode Pipeline Scan workflows with Baseline Management
 
-This repository provides reusable **GitHub Actions workflows** for integrating Veracode Pipeline Scans with automated baseline tracking and mitigation context. It is designed to be used across multiple repositories without duplicating CI logic, using a centralized baseline repository (e.g., `your-org/veracode-ci-baselines`) as a storage location for scan baselines and results.
+This repository provides reusable **GitHub Actions workflows** for integrating Veracode Pipeline Scans with automated baseline tracking and adding mitigation context. It is designed to be used across multiple repositories without duplicating CI logic, using a centralized baseline repository (e.g., `your-org/veracode-ci-baselines`) as a storage location for scan baselines and Pipeline scan templates.
 
 By default, all consuming repositories push and pull baseline files to this shared repository, organized by GitHub repository name and branch.
 
@@ -126,29 +126,6 @@ Ensure the PAT belongs to a user or bot account that has push access to the shar
 | Delta Scan    | Push / PR          | Fetches baseline.json and runs comparison scan for new findings   |
 
 Baseline commits use `[skip ci]` to prevent triggering new pipelines when committing baseline files.
-
----
-
-## Branch and Access Control
-
-To enable the workflow to push files:
-
-* Make sure the `CI_PUSH_TOKEN_VCT` user has push access to the target branch (e.g., `main`) of the shared repo
-* If using branch protection, configure it to allow commits from GitHub Actions or the token user
-
----
-
-## Optional Configuration Examples
-
-You can override the shared baseline repo and branch if needed:
-
-```yaml
-env:
-  VERACODE_BASELINE_REPO: your-org/custom-baselines
-  VERACODE_BASELINE_BRANCH: baseline-updates
-```
-
-This is useful for teams with separate baseline tracking needs or private forks.
 
 ---
 
