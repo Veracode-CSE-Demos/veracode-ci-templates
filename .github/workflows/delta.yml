@@ -9,7 +9,6 @@ jobs:
 
     env:
       ARTIFACT_FOLDER: app/target  # Adjust for your project structure
-      ARTIFACT_PATTERN: "*.{jar,war,ear,zip,tar.gz,tar,py,js,ts,php,rb,class,dll,exe}"
       VERACODE_BASELINE_PATH: baseline.json
       VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates # Adjust for your project structure
       VERACODE_BASELINE_BRANCH: main
@@ -24,19 +23,49 @@ jobs:
           cd app
           mvn clean package -DskipTests
 
-      # Locate the first matching artifact file
+      # Find the artifact in the specified folder
       - name: Locate artifact
         id: find_artifact
         run: |
-          ART=$(find "$ARTIFACT_FOLDER" -type f \( \
-            -iname "*.jar" -o -iname "*.war" -o -iname "*.ear" -o \
-            -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tar" -o \
-            -iname "*.py" -o -iname "*.js" -o -iname "*.ts" -o \
-            -iname "*.php" -o -iname "*.rb" -o -iname "*.class" -o \
-            -iname "*.dll" -o -iname "*.exe" \) | head -n1)
+          shopt -s nullglob
 
-          echo "ARTIFACT=$ART" >> $GITHUB_ENV
-          if [ -z "$ART" ]; then echo "No artifact found"; exit 1; fi
+          # Add extensions relevant to your scan target (Adjust)
+          files=(
+            "$ARTIFACT_FOLDER"/*.java
+            "$ARTIFACT_FOLDER"/*.cs
+            "$ARTIFACT_FOLDER"/*.vb
+            "$ARTIFACT_FOLDER"/*.js
+            "$ARTIFACT_FOLDER"/*.ts
+            "$ARTIFACT_FOLDER"/*.jsx
+            "$ARTIFACT_FOLDER"/*.tsx
+            "$ARTIFACT_FOLDER"/*.vue
+            "$ARTIFACT_FOLDER"/*.html
+            "$ARTIFACT_FOLDER"/*.htm
+            "$ARTIFACT_FOLDER"/*.py
+            "$ARTIFACT_FOLDER"/*.php
+            "$ARTIFACT_FOLDER"/*.sql
+            "$ARTIFACT_FOLDER"/*.dll
+            "$ARTIFACT_FOLDER"/*.exe
+            "$ARTIFACT_FOLDER"/*.jar
+            "$ARTIFACT_FOLDER"/*.war
+            "$ARTIFACT_FOLDER"/*.zip
+            "$ARTIFACT_FOLDER"/*.tar.gz
+          )
+
+          ARTIFACT=""
+          for file in "${files[@]}"; do
+            ARTIFACT="$file"
+            break
+          done
+
+          if [ -z "$ARTIFACT" ]; then
+            echo "No matching artifact found in $ARTIFACT_FOLDER"
+            exit 1
+          fi
+
+          echo "ARTIFACT=$ARTIFACT" >> $GITHUB_ENV
+          echo "Using artifact: $ARTIFACT"
+
 
       # Download the Veracode pipeline scanner
       - name: Download Veracode scanner
@@ -53,7 +82,7 @@ jobs:
           token: ${{ secrets.CI_PUSH_TOKEN_VCT }}
           path: baseline-repo
 
-      # Copy the correct baseline.json into the working directory
+      # Copy the baseline.json into the working directory
       - name: Copy baseline file
         run: |
           REPO_SLUG=$(echo "${{ github.repository }}" | tr '/' '_')
@@ -67,7 +96,7 @@ jobs:
 
           cp "$BASELINE_PATH" "${VERACODE_BASELINE_PATH}"
 
-      # Run Veracode delta scan comparing results to the baseline.json
+      # Run Veracode delta scan with the mitigations baseline
       - name: Run Veracode delta scan
         run: |
           java -jar pipeline-scan.jar \
