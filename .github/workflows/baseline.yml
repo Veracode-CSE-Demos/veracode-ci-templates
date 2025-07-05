@@ -39,8 +39,8 @@ jobs:
           wget https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
           unzip -n pipeline-scan-LATEST.zip
 
-      # Run the pipeline scan and output to results.json
-      # Then generate a mitigation-aware baseline.json using veracode-pipeline-mitigation (https://github.com/veracode/veracode-pipeline-mitigation)
+      # Run the pipeline scan and generate a mitigation-aware baseline.json
+      # using veracode-pipeline-mitigation: https://github.com/veracode/veracode-pipeline-mitigation
       - name: Scan and generate baseline
         run: |
           java -jar pipeline-scan.jar \
@@ -49,13 +49,19 @@ jobs:
             --file "${ARTIFACT}" \
             --json_output_file "${VERACODE_RESULTS_PATH}" \
             --fail_on_severity ""
+      
           pip3 install -r https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/requirements.txt
-          wget https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/vcpipemit.py -O vcpipemit.py (https://github.com/veracode/veracode-pipeline-mitigation)
+      
+          # https://github.com/veracode/veracode-pipeline-mitigation
+          wget https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/vcpipemit.py -O vcpipemit.py
+      
           export VERACODE_API_KEY_ID="${{ secrets.VERACODE_API_ID }}"
           export VERACODE_API_KEY_SECRET="${{ secrets.VERACODE_API_KEY }}"
           python3 vcpipemit.py --results "${VERACODE_RESULTS_PATH}" --applicationname "${{ secrets.VERACODE_APP_NAME }}"
+      
           BASELINE_FILE=$(ls baseline-*.json | head -n1)
           echo "BASELINE_FILE=$BASELINE_FILE" >> $GITHUB_ENV
+
 
       # Commit the baseline.json and results.json to the shared baseline repository
       - name: Commit baseline and results to shared repo
