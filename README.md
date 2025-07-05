@@ -154,6 +154,5 @@ This is useful for teams with separate baseline tracking needs or private forks.
 
 ## References
 
-* [Veracode Pipeline Scan Documentation](https://docs.veracode.com/r/t_pipeline_scan_intro)
+* [Veracode Pipeline Scan Documentation](https://docs.veracode.com/r/r_pipeline_scan_commands)
 * [Veracode Mitigation Script](https://github.com/tjarrettveracode/veracode-pipeline-mitigation)
-* [GitHub Actions Documentation](https://docs.github.com/en/actions)
