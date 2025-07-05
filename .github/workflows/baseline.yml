@@ -12,7 +12,7 @@ jobs:
       ARTIFACT_FOLDER: app/target # (Adjust for your project structure)
       ARTIFACT_PATTERN: "*.{jar,war,ear,zip,tar.gz,tar,py,js,ts,php,rb,class,dll,exe}"
       VERACODE_RESULTS_PATH: results.json
-      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/baseline_mitigations # (Adjust for your project structure)
+      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates # (Adjust for your project structure)
       VERACODE_BASELINE_BRANCH: main # (Optional: Adjust)
 
     steps:
