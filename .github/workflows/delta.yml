@@ -1,0 +1,66 @@
+name: Veracode Delta Scan
+
+on:
+  workflow_call:
+
+jobs:
+  delta:
+    runs-on: ubuntu-latest
+
+    env:
+      ARTIFACT_FOLDER: app/target  # (Adjust for your project structure)
+      ARTIFACT_PATTERN: "*.{jar,war,ear,zip,tar.gz,tar,py,js,ts,php,rb,class,dll,exe}"
+      VERACODE_BASELINE_PATH: baseline.json
+      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/baseline_mitigations  # (Adjust for your project structure)
+      VERACODE_BASELINE_BRANCH: main  # (Optional: Adjust)
+
+    steps:
+      # Checkout the application code
+      - uses: actions/checkout@v4
+
+      # Build the application
+      - name: Build project
+        run: |
+          cd app
+          mvn clean package -DskipTests
+
+      # Detect the artifact to scan
+      - name: Locate artifact
+        id: find_artifact
+        run: |
+          ART=$(find "$ARTIFACT_FOLDER" -type f \( -iname "*.jar" -o -iname "*.war" -o -iname "*.ear" -o -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tar" -o -iname "*.py" -o -iname "*.js" -o -iname "*.ts" -o -iname "*.php" -o -iname "*.rb" -o -iname "*.class" -o -iname "*.dll" -o -iname "*.exe" \) | head -n1)
+          echo "ARTIFACT=$ART" >> $GITHUB_ENV
+          if [ -z "$ART" ]; then echo "No artifact found"; exit 1; fi
+
+      # Download Veracode pipeline scanner
+      - name: Download Veracode scanner
+        run: |
+          wget https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip -n pipeline-scan-LATEST.zip
+
+      # Pull the baseline.json from the baseline repository
+      - name: Pull baseline file from shared repo
+        env:
+          CI_PUSH_TOKEN_VCT: ${{ secrets.CI_PUSH_TOKEN_VCT }}
+        run: |
+          REPO_SLUG=$(echo "${{ github.repository }}" | tr '/' '_')
+          BRANCH=${{ github.ref_name }}
+          DIR="baselines/${REPO_SLUG}/${BRANCH}"
+
+          git clone --depth 1 --branch "${VERACODE_BASELINE_BRANCH}" https://${CI_PUSH_TOKEN_VCT}@github.com/${VERACODE_BASELINE_REPO} baseline-repo
+          cp "baseline-repo/${DIR}/baseline.json" "${VERACODE_BASELINE_PATH}"
+
+          if [ ! -f "${VERACODE_BASELINE_PATH}" ]; then
+            echo "Baseline file not found at ${VERACODE_BASELINE_PATH}"
+            exit 1
+          fi
+
+      # Run the scan comparing the artifact against the stored baseline.json
+      - name: Run Veracode delta scan
+        run: |
+          java -jar pipeline-scan.jar \
+            --veracode_api_id "${{ secrets.VERACODE_API_ID }}" \
+            --veracode_api_key "${{ secrets.VERACODE_API_KEY }}" \
+            --file "${ARTIFACT}" \
+            --baseline_file "${VERACODE_BASELINE_PATH}" \
+            --fail_on_severity ""
