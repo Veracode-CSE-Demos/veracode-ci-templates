@@ -1,0 +1,82 @@
+name: Veracode Baseline Scan
+
+on:
+  workflow_call:
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    
+
+    env:
+      ARTIFACT_FOLDER: app/target # (Adjust for your project structure)
+      ARTIFACT_PATTERN: "*.{jar,war,ear,zip,tar.gz,tar,py,js,ts,php,rb,class,dll,exe}"
+      VERACODE_RESULTS_PATH: results.json
+      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/baseline_mitigations # (Adjust for your project structure)
+      VERACODE_BASELINE_BRANCH: main # (Optional: Adjust)
+
+    steps:
+      # Checkout the current repository code
+      - uses: actions/checkout@v4
+
+      # Build the application (Adjust for your project structure)
+      - name: Build project
+        run: |
+          cd app
+          mvn clean package -DskipTests
+
+      # Find the first Veracode-compatible artifact in the specified folder
+      - name: Locate artifact
+        id: find_artifact
+        run: |
+          ART=$(find "$ARTIFACT_FOLDER" -type f \( -iname "*.jar" -o -iname "*.war" -o -iname "*.ear" -o -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tar" -o -iname "*.py" -o -iname "*.js" -o -iname "*.ts" -o -iname "*.php" -o -iname "*.rb" -o -iname "*.class" -o -iname "*.dll" -o -iname "*.exe" \) | head -n1)
+          echo "ARTIFACT=$ART" >> $GITHUB_ENV
+          if [ -z "$ART" ]; then echo "No artifact found"; exit 1; fi
+
+      # Download Veracode pipeline scanner
+      - name: Download Veracode scanner
+        run: |
+          wget https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip -n pipeline-scan-LATEST.zip
+
+      # Run the pipeline scan and output to results.json
+      # Then generate a mitigation-aware baseline.json using veracode-pipeline-mitigation (https://github.com/veracode/veracode-pipeline-mitigation)
+      - name: Scan and generate baseline
+        run: |
+          java -jar pipeline-scan.jar \
+            --veracode_api_id "${{ secrets.VERACODE_API_ID }}" \
+            --veracode_api_key "${{ secrets.VERACODE_API_KEY }}" \
+            --file "${ARTIFACT}" \
+            --json_output_file "${VERACODE_RESULTS_PATH}" \
+            --fail_on_severity ""
+          pip3 install -r https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/requirements.txt
+          wget https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/vcpipemit.py -O vcpipemit.py (https://github.com/veracode/veracode-pipeline-mitigation)
+          export VERACODE_API_KEY_ID="${{ secrets.VERACODE_API_ID }}"
+          export VERACODE_API_KEY_SECRET="${{ secrets.VERACODE_API_KEY }}"
+          python3 vcpipemit.py --results "${VERACODE_RESULTS_PATH}" --applicationname "${{ secrets.VERACODE_APP_NAME }}"
+          BASELINE_FILE=$(ls baseline-*.json | head -n1)
+          echo "BASELINE_FILE=$BASELINE_FILE" >> $GITHUB_ENV
+
+      # Commit the baseline.json and results.json to the shared baseline repository
+      - name: Commit baseline and results to shared repo
+        env:
+          CI_PUSH_TOKEN_VCT: ${{ secrets.CI_PUSH_TOKEN_VCT }}
+        run: |
+          # Construct the destination path: baselines/<owner_repo>/<branch>
+          REPO_SLUG=$(echo "${{ github.repository }}" | tr '/' '_')
+          BRANCH=${{ github.ref_name }}
+          VERACODE_DIR="baselines/${REPO_SLUG}/${BRANCH}"
+
+          git config --global user.email "veracode-bot@github"
+          git config --global user.name "Veracode Bot"
+          git clone https://${CI_PUSH_TOKEN_VCT}@github.com/${VERACODE_BASELINE_REPO} baseline-repo
+          cd baseline-repo
+          git checkout "${VERACODE_BASELINE_BRANCH}" || git checkout -b "${VERACODE_BASELINE_BRANCH}"
+          mkdir -p "${VERACODE_DIR}"
+
+          cp ../${VERACODE_RESULTS_PATH} "${VERACODE_DIR}/results.json"
+          cp ../${BASELINE_FILE} "${VERACODE_DIR}/baseline.json"
+
+          git add "${VERACODE_DIR}"
+          git commit -m "Update baseline for ${REPO_SLUG}:${BRANCH} [skip ci]" || echo "No changes"
+          git push origin "${VERACODE_BASELINE_BRANCH}"
