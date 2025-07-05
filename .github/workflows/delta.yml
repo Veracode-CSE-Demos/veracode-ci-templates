@@ -8,54 +8,66 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ARTIFACT_FOLDER: app/target  # (Adjust for your project structure)
+      ARTIFACT_FOLDER: app/target  # Adjust for your project structure
       ARTIFACT_PATTERN: "*.{jar,war,ear,zip,tar.gz,tar,py,js,ts,php,rb,class,dll,exe}"
       VERACODE_BASELINE_PATH: baseline.json
-      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates # (Adjust for your project structure)
-      VERACODE_BASELINE_BRANCH: main  # (Optional: Adjust)
+      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates # Adjust for your project structure
+      VERACODE_BASELINE_BRANCH: main
 
     steps:
-      # Checkout the application code
+      # Checkout the application source code
       - uses: actions/checkout@v4
 
-      # Build the application
+      # Build the application (adjust this step to fit your project)
       - name: Build project
         run: |
           cd app
           mvn clean package -DskipTests
 
-      # Detect the artifact to scan
+      # Locate the first matching artifact file
       - name: Locate artifact
         id: find_artifact
         run: |
-          ART=$(find "$ARTIFACT_FOLDER" -type f \( -iname "*.jar" -o -iname "*.war" -o -iname "*.ear" -o -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tar" -o -iname "*.py" -o -iname "*.js" -o -iname "*.ts" -o -iname "*.php" -o -iname "*.rb" -o -iname "*.class" -o -iname "*.dll" -o -iname "*.exe" \) | head -n1)
+          ART=$(find "$ARTIFACT_FOLDER" -type f \( \
+            -iname "*.jar" -o -iname "*.war" -o -iname "*.ear" -o \
+            -iname "*.zip" -o -iname "*.tar.gz" -o -iname "*.tar" -o \
+            -iname "*.py" -o -iname "*.js" -o -iname "*.ts" -o \
+            -iname "*.php" -o -iname "*.rb" -o -iname "*.class" -o \
+            -iname "*.dll" -o -iname "*.exe" \) | head -n1)
+
           echo "ARTIFACT=$ART" >> $GITHUB_ENV
           if [ -z "$ART" ]; then echo "No artifact found"; exit 1; fi
 
-      # Download Veracode pipeline scanner
+      # Download the Veracode pipeline scanner
       - name: Download Veracode scanner
         run: |
           wget https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
           unzip -n pipeline-scan-LATEST.zip
 
-      # Pull the baseline.json from the baseline repository
-      - name: Pull baseline file from shared repo
-        env:
-          CI_PUSH_TOKEN_VCT: ${{ secrets.CI_PUSH_TOKEN_VCT }}
+      # Checkout the shared baseline repo to a subfolder
+      - name: Checkout baseline repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.VERACODE_BASELINE_REPO }}
+          ref: ${{ env.VERACODE_BASELINE_BRANCH }}
+          token: ${{ secrets.CI_PUSH_TOKEN_VCT }}
+          path: baseline-repo
+
+      # Copy the correct baseline.json into the working directory
+      - name: Copy baseline file
         run: |
           REPO_SLUG=$(echo "${{ github.repository }}" | tr '/' '_')
           BRANCH=${{ github.ref_name }}
-          DIR="baselines/${REPO_SLUG}/${BRANCH}"
+          BASELINE_PATH="baseline-repo/baselines/${REPO_SLUG}/${BRANCH}/baseline.json"
 
-          git clone --depth 1 --branch "${VERACODE_BASELINE_BRANCH}" https://${CI_PUSH_TOKEN_VCT}@github.com/${VERACODE_BASELINE_REPO} baseline-repo
-          cp "baseline-repo/${DIR}/baseline.json" "${VERACODE_BASELINE_PATH}"
-
-          if [ ! -f "${VERACODE_BASELINE_PATH}" ]; then
-            echo "Baseline file not found at ${VERACODE_BASELINE_PATH}"
+          if [ ! -f "$BASELINE_PATH" ]; then
+            echo "Baseline file not found at $BASELINE_PATH"
             exit 1
           fi
 
-      # Run the scan comparing the artifact against the stored baseline.json
+          cp "$BASELINE_PATH" "${VERACODE_BASELINE_PATH}"
+
+      # Run Veracode delta scan comparing results to the baseline.json
       - name: Run Veracode delta scan
         run: |
           java -jar pipeline-scan.jar \
@@ -63,4 +75,4 @@ jobs:
             --veracode_api_key "${{ secrets.VERACODE_API_KEY }}" \
             --file "${ARTIFACT}" \
             --baseline_file "${VERACODE_BASELINE_PATH}" \
-            --fail_on_severity ""
+            --fail_on_severity "High, Very High"
