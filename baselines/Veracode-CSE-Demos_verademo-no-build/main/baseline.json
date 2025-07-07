@@ -3,7 +3,7 @@
         {
             "title": "java.lang.Runtime.exec",
             "issue_id": 1216,
-            "image_path": "file:/tmp/tmpdbr3hnz4/binary/verademo.veracodegen.vc.war#zip:com/veracode/verademo/controller/ToolsController",
+            "image_path": "file:/tmp/tmpb1x6ya9r/binary/verademo.veracodegen.vc.war#zip:com/veracode/verademo/controller/ToolsController",
             "gob": "B",
             "severity": 5,
             "issue_type_id": "taint",
@@ -49,7 +49,7 @@
         {
             "title": "java.sql.Statement.executeQuery",
             "issue_id": 1029,
-            "image_path": "file:/tmp/tmpdbr3hnz4/binary/verademo.veracodegen.vc.war#zip:com/veracode/verademo/controller/UserController",
+            "image_path": "file:/tmp/tmpb1x6ya9r/binary/verademo.veracodegen.vc.war#zip:com/veracode/verademo/controller/UserController",
             "gob": "B",
             "severity": 4,
             "issue_type_id": "taint",
