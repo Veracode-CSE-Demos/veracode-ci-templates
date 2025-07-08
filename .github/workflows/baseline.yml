@@ -41,13 +41,15 @@ jobs:
 
       # Run Veracode Pipeline Scan via official GitHub Action
       - name: Run Veracode Pipeline Scan
-        uses: veracode/github-actions@pipeline-scan
+        uses: veracode/github-actions@v0.2.6
         with:
+          action: pipeline-scan
           vid: ${{ secrets.VERACODE_API_ID }}
           vkey: ${{ secrets.VERACODE_API_KEY }}
           file: ${{ env.ARTIFACT }}
-          json_output_file: ${{ env.VERACODE_RESULTS_PATH }}
-          fail_on_severity: ""  # Optional: ignore severity-based failure
+          json_output: ${{ env.VERACODE_RESULTS_PATH }}
+          fail_on_severity: ''  # empty to not fail based on severity
+
 
       # Generate mitigation-aware baseline.json
       - name: Generate Baseline with Mitigations
