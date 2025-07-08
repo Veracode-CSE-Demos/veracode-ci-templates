@@ -28,44 +28,18 @@ jobs:
       - name: Locate artifact
         id: find_artifact
         run: |
-          shopt -s nullglob
-
-          # Add extensions relevant to your scan target (Adjust)
-          files=(
-            "$ARTIFACT_FOLDER"/*.java
-            "$ARTIFACT_FOLDER"/*.cs
-            "$ARTIFACT_FOLDER"/*.vb
-            "$ARTIFACT_FOLDER"/*.js
-            "$ARTIFACT_FOLDER"/*.ts
-            "$ARTIFACT_FOLDER"/*.jsx
-            "$ARTIFACT_FOLDER"/*.tsx
-            "$ARTIFACT_FOLDER"/*.vue
-            "$ARTIFACT_FOLDER"/*.html
-            "$ARTIFACT_FOLDER"/*.htm
-            "$ARTIFACT_FOLDER"/*.py
-            "$ARTIFACT_FOLDER"/*.php
-            "$ARTIFACT_FOLDER"/*.sql
-            "$ARTIFACT_FOLDER"/*.dll
-            "$ARTIFACT_FOLDER"/*.exe
-            "$ARTIFACT_FOLDER"/*.jar
-            "$ARTIFACT_FOLDER"/*.war
-            "$ARTIFACT_FOLDER"/*.zip
-            "$ARTIFACT_FOLDER"/*.tar.gz
-          )
-
-          ARTIFACT=""
-          for file in "${files[@]}"; do
-            ARTIFACT="$file"
-            break
-          done
-
+          ARTIFACT=$(find "$ARTIFACT_FOLDER" -regextype posix-extended -type f \
+            -regex ".*\.(java|cs|vb|js|ts|jsx|tsx|vue|html?|py|php|sql|dll|exe|jar|war|zip|tar\.gz)$" \
+            | head -n 1)
+      
           if [ -z "$ARTIFACT" ]; then
             echo "No matching artifact found in $ARTIFACT_FOLDER"
             exit 1
           fi
-
+      
           echo "ARTIFACT=$ARTIFACT" >> $GITHUB_ENV
           echo "Using artifact: $ARTIFACT"
+
 
 
       # Download Veracode pipeline scanner
