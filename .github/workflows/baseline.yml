@@ -28,15 +28,15 @@ jobs:
         id: find_artifact
         run: |
           ARTIFACT=$(find "$ARTIFACT_FOLDER" -regextype posix-extended -type f \
-            -regex ".*\.(java|cs|vb|js|ts|jsx|tsx|vue|html?|py|php|sql|dll|exe|jar|war|zip|tar\.gz)$" \
+            -regex ".*\.(jar|war|ear|dll|exe|nupkg|zip|tar|tar\.gz|tgz|py|php|js|ts|jsx|tsx|vue|html?|cs|vb|sql)$" \
             | head -n 1)
-          
+
           if [ -z "$ARTIFACT" ]; then
             echo "No matching artifact found in $ARTIFACT_FOLDER"
             exit 1
           fi
-          
-          echo "ARTIFACT=$ARTIFACT" >> $GITHUB_ENV
+
+          echo "ARTIFACT=$ARTIFACT" >> "$GITHUB_ENV"
           echo "Using artifact: $ARTIFACT"
 
       # Run Veracode pipeline scan using the official GitHub Action
