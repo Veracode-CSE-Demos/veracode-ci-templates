@@ -39,6 +39,7 @@ jobs:
           echo "ARTIFACT=$ARTIFACT" >> "$GITHUB_ENV"
           echo "Using artifact: $ARTIFACT"
 
+
       # Run Veracode pipeline scan using the official GitHub Action
       - name: Run Veracode Pipeline Scan
         id: pipeline_scan
