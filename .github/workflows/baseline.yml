@@ -6,19 +6,18 @@ on:
 jobs:
   baseline:
     runs-on: ubuntu-latest
-    
 
     env:
-      ARTIFACT_FOLDER: app/target # (Adjust for your project structure)
+      ARTIFACT_FOLDER: app/target  # Adjust for your project structure
       VERACODE_RESULTS_PATH: results.json
-      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates # (Adjust for your project structure)
-      VERACODE_BASELINE_BRANCH: main # (Optional: Adjust)
+      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates  # Adjust for your setup
+      VERACODE_BASELINE_BRANCH: main  # Optional: adjust for your repo
 
     steps:
-      # Checkout the current repository code
+      # Checkout current repository code
       - uses: actions/checkout@v4
 
-      # Build the application (Adjust for your project structure)
+      # Build the application (adjust as needed)
       - name: Build project
         run: |
           cd app
@@ -31,53 +30,43 @@ jobs:
           ARTIFACT=$(find "$ARTIFACT_FOLDER" -regextype posix-extended -type f \
             -regex ".*\.(java|cs|vb|js|ts|jsx|tsx|vue|html?|py|php|sql|dll|exe|jar|war|zip|tar\.gz)$" \
             | head -n 1)
-      
+
           if [ -z "$ARTIFACT" ]; then
             echo "No matching artifact found in $ARTIFACT_FOLDER"
             exit 1
           fi
-      
+
           echo "ARTIFACT=$ARTIFACT" >> $GITHUB_ENV
           echo "Using artifact: $ARTIFACT"
 
+      # Run Veracode Pipeline Scan via official GitHub Action
+      - name: Run Veracode Pipeline Scan
+        uses: veracode/github-actions@pipeline-scan
+        with:
+          vid: ${{ secrets.VERACODE_API_ID }}
+          vkey: ${{ secrets.VERACODE_API_KEY }}
+          file: ${{ env.ARTIFACT }}
+          json_output_file: ${{ env.VERACODE_RESULTS_PATH }}
+          fail_on_severity: ""  # Optional: ignore severity-based failure
 
-
-      # Download Veracode pipeline scanner
-      - name: Download Veracode scanner
+      # Generate mitigation-aware baseline.json
+      - name: Generate Baseline with Mitigations
         run: |
-          wget https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
-          unzip -n pipeline-scan-LATEST.zip
-
-      # Run the pipeline scan and generate a mitigation-aware baseline.json
-      # using veracode-pipeline-mitigation: https://github.com/veracode/veracode-pipeline-mitigation
-      - name: Scan and generate baseline
-        run: |
-          java -jar pipeline-scan.jar \
-            --veracode_api_id "${{ secrets.VERACODE_API_ID }}" \
-            --veracode_api_key "${{ secrets.VERACODE_API_KEY }}" \
-            --file "${ARTIFACT}" \
-            --json_output_file "${VERACODE_RESULTS_PATH}" \
-            --fail_on_severity ""
-      
           pip3 install -r https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/requirements.txt
-      
-          # https://github.com/veracode/veracode-pipeline-mitigation
           wget https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/vcpipemit.py -O vcpipemit.py
-      
+
           export VERACODE_API_KEY_ID="${{ secrets.VERACODE_API_ID }}"
           export VERACODE_API_KEY_SECRET="${{ secrets.VERACODE_API_KEY }}"
           python3 vcpipemit.py --results "${VERACODE_RESULTS_PATH}" --applicationname "${{ secrets.VERACODE_APP_NAME }}"
-      
+
           BASELINE_FILE=$(ls baseline-*.json | head -n1)
           echo "BASELINE_FILE=$BASELINE_FILE" >> $GITHUB_ENV
 
-
-      # Commit the baseline.json and results.json to the shared baseline repository
+      # Commit baseline and results.json to shared repo
       - name: Commit baseline and results to shared repo
         env:
           CI_PUSH_TOKEN_VCT: ${{ secrets.CI_PUSH_TOKEN_VCT }}
         run: |
-          # Construct the destination path: baselines/<owner_repo>/<branch>
           REPO_SLUG=$(echo "${{ github.repository }}" | tr '/' '_')
           BRANCH=${{ github.ref_name }}
           VERACODE_DIR="baselines/${REPO_SLUG}/${BRANCH}"
