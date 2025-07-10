@@ -36,7 +36,7 @@ jobs:
   baseline:
     # Only run baseline on manual trigger or scheduled runs
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
-    uses: your-org/veracode-ci-templates/.github/workflows/delta.yml@main
+    uses: your-org/veracode-ci-templates/.github/workflows/baseline.yml@main
     secrets: inherit
 
   delta:
