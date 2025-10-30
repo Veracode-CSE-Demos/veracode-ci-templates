@@ -23,7 +23,7 @@ This mode ignores existing vulnerabilities (technical debt) but still shows unmi
 ### 2. **Mitigation-Aware Scans**
 
 When using **baseline-mitigated-findings.json** (generated via the [Veracode Mitigation Script](https://github.com/tjarrettveracode/veracode-pipeline-mitigation)),
-the delta scan ignores **already mitigated or accepted** findings within the Veracode platform, reporting only *new, unmitigated* issues.
+the delta scan ignores **already mitigated or accepted** findings within the Veracode platform, reporting only *unmitigated* issues.
 
 ---
 
