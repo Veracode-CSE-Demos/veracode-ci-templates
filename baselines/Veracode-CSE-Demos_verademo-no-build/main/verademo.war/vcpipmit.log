@@ -1,0 +1,4 @@
+2025-10-30 00:57:20,835 - INFO - get_app_findings - Getting findings for application ed4de30c-1374-47cc-bade-a2cc84f10fc2
+2025-10-30 00:57:25,755 - INFO - get_app_findings - Got 201 findings for app guid ed4de30c-1374-47cc-bade-a2cc84f10fc2 and sandbox guid None
+2025-10-30 00:57:25,758 - INFO - get_results_findings - The results file baseline.json contains 201 findings
+2025-10-30 00:57:25,758 - INFO - main - Processed 2 matched findings. See log file for details
