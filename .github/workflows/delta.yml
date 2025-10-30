@@ -1,0 +1,174 @@
+name: Veracode Delta Scan
+
+on:
+  workflow_call:
+
+jobs:
+  delta:
+    runs-on: ubuntu-latest
+
+    env:
+      AUTOPACK_OUT_DIR: verascan
+      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates
+      VERACODE_BASELINE_BRANCH: main
+
+    steps:
+      # Checkout the repository to scan ---
+      - uses: actions/checkout@v4
+
+      # Install Veracode CLI and set up PATH ---
+      - name: Install Veracode CLI
+        shell: bash
+        run: |
+          curl -fsS -O https://tools.veracode.com/veracode-cli/install
+          chmod +x ./install
+          ./install | tee install.log
+
+          # Extract the CLI directory from install log
+          CLI_DIR="$(awk -F'"' '/copying files into/ {print $2; exit}' install.log)"
+          [ -n "$CLI_DIR" ] || { echo "CLI_DIR not found in install.log"; exit 1; }
+
+          # Save to environment and PATH for later steps
+          echo "CLI_DIR=$CLI_DIR" >> "$GITHUB_ENV"
+          echo "$CLI_DIR"         >> "$GITHUB_PATH"
+          export PATH="$CLI_DIR:$PATH"
+
+          # Quiet the CLI’s first-run warning
+          mkdir -p "$HOME/.veracode"
+          : > "$HOME/.veracode/veracode.yml"
+
+          veracode version
+
+      # Automatically package the repo into /verascan ---
+      - name: Autopackage repository
+        shell: bash
+        run: |
+          export PATH="$CLI_DIR:$PATH"
+          mkdir -p "$AUTOPACK_OUT_DIR"
+
+          # Package source code (top-level only)
+          veracode package --source . --output "$AUTOPACK_OUT_DIR" --trust
+
+          echo "Packaged files in $AUTOPACK_OUT_DIR:"
+          ls -lh "$AUTOPACK_OUT_DIR" || true
+
+      # Find all top-level packaged artifacts ---
+      - name: Discover packaged artifacts
+        id: discover
+        shell: bash
+        run: |
+          echo "Searching for packaged artifacts in $AUTOPACK_OUT_DIR ..."
+          exts="jar war ear dll exe nupkg zip tar tgz tar.gz"
+          files=()
+
+          for ext in $exts; do
+            for f in "$AUTOPACK_OUT_DIR"/*.$ext; do
+              [[ -f "$f" ]] && files+=("$f")
+            done
+          done
+
+          # Fail if nothing was found
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No packaged artifacts found."
+            ls -l "$AUTOPACK_OUT_DIR" || true
+            exit 1
+          fi
+
+          # Save artifact list to file
+          printf '%s\n' "${files[@]}" > artifacts_list.txt
+
+          echo "Found ${#files[@]} artifact(s):"
+          printf ' - %s\n' "${files[@]}"
+
+      # Download the Veracode Pipeline Scanner ---
+      - name: Download Veracode scanner
+        shell: bash
+        run: |
+          wget -q https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip -n pipeline-scan-LATEST.zip
+
+      # Checkout the baseline repository ---
+      - name: Checkout baseline repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.VERACODE_BASELINE_REPO }}
+          ref: ${{ env.VERACODE_BASELINE_BRANCH }}
+          token: ${{ secrets.CI_PUSH_TOKEN_VCT }}
+          path: baseline-repo
+
+      # Run mitigation-aware delta scans on all artifacts ---
+      - name: Run Veracode delta scans (multi-artifact)
+        shell: bash
+        env:
+          FAIL_SEVERITY: "High, Very High"             # fail if these severities found
+          BASELINE_FILENAME: baseline.json
+          STRICT_BASELINES: "false"                    # set true to fail if baseline missing
+        run: |
+          rc_overall=0
+          passes=0; fails=0; missing=0; scanned=0
+
+          REPO_SLUG="$(echo "${{ github.repository }}" | tr '/' '_')"
+          BRANCH="${{ github.ref_name }}"
+          BASE_DIR="baseline-repo/baselines/${REPO_SLUG}/${BRANCH}"
+
+          while IFS= read -r artifact; do
+            [[ -z "$artifact" ]] && continue
+            name="$(basename "$artifact")"
+            safe="${name//[^A-Za-z0-9_.-]/_}"
+            BASELINE_PATH="${BASE_DIR}/${safe}/${BASELINE_FILENAME}"
+
+            # Skip artifacts with no baseline file
+            if [[ ! -f "$BASELINE_PATH" ]]; then
+              echo "::warning file=${safe}::Missing baseline at ${BASELINE_PATH} (skipping)"
+              missing=$((missing+1))
+              [[ "${STRICT_BASELINES}" == "true" ]] && rc_overall=1
+              continue
+            fi
+
+            echo ""
+            echo "---------------------------------------------"
+            echo "Running delta scan for: $name"
+            echo "Baseline file:         $BASELINE_PATH"
+            echo "---------------------------------------------"
+
+            set +e
+            java -jar pipeline-scan.jar \
+              --veracode_api_id "${{ secrets.VERACODE_API_ID }}" \
+              --veracode_api_key "${{ secrets.VERACODE_API_KEY }}" \
+              --file "$artifact" \
+              --baseline_file "$BASELINE_PATH" \
+              --fail_on_severity "${FAIL_SEVERITY}"
+            rc=$?
+            set -e
+
+            scanned=$((scanned+1))
+
+            if [[ $rc -ne 0 ]]; then
+              echo "::error file=${safe}::Delta scan FAILED for ${name} (exit ${rc})"
+              fails=$((fails+1))
+              rc_overall=1
+            else
+              echo "::notice file=${safe}::Delta scan PASSED for ${name}"
+              passes=$((passes+1))
+            fi
+          done < artifacts_list.txt
+
+          # Generate summary table in GitHub step summary
+          {
+            echo "## Veracode Delta Scan Summary"
+            echo ""
+            echo "| Metric | Count |"
+            echo "|---|---:|"
+            echo "| Scanned | ${scanned} |"
+            echo "| Passed  | ${passes} |"
+            echo "| Failed  | ${fails} |"
+            echo "| Missing baselines | ${missing} |"
+            echo ""
+            if [[ "${STRICT_BASELINES}" == "true" ]]; then
+              echo "_Strict baselines enabled: missing baselines will fail the job._"
+            else
+              echo "_Missing baselines are warnings only (job passes if scans succeed)._"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit $rc_overall
