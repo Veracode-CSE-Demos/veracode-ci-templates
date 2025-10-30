@@ -181,6 +181,6 @@ Each baseline update uses `[skip ci]` to avoid infinite workflow loops.
 
 * [Veracode Pipeline Scan Docs](https://docs.veracode.com/r/r_pipeline_scan_commands)
 * [Veracode Mitigation Helper Script](https://github.com/tjarrettveracode/veracode-pipeline-mitigation)
-* [Veracode CLI Documentation](https://docs.veracode.com/r/r_veracode_cli_overview)
+* [Veracode CLI Documentation](https://docs.veracode.com/r/CLI_Reference)
 
 ---
