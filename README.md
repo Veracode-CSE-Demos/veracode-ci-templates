@@ -149,7 +149,7 @@ This structure supports multiple repositories, branches, and artifacts simultane
 | -------------------------- | -------- | ------------------------------------------------------------------ |
 | `VERACODE_API_ID`          | ✅        | Veracode API ID                                                    |
 | `VERACODE_API_KEY`         | ✅        | Veracode API Key                                                   |
-| `VERACODE_APP_NAME`        | ✅        | Application name in Veracode (Repo to be scanned)                  |
+| `VERACODE_APP_NAME`        | ✅        | Application name in Veracode (On the repos to be scanned)          |
 | `CI_PUSH_TOKEN_VCT`        | ✅        | GitHub PAT with repo write access                                  |
 | `VERACODE_BASELINE_REPO`   | ✅        | Shared baseline repository (e.g. `your-org/veracode-ci-baselines`) |
 | `VERACODE_BASELINE_BRANCH` | ❌        | Optional; defaults to `main`                                       |
