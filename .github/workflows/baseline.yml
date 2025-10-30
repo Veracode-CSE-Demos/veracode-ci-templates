@@ -1,0 +1,232 @@
+name: Veracode Baseline Creator
+
+on:
+  workflow_call:
+
+jobs:
+  build-baselines:
+    runs-on: ubuntu-latest
+
+    env:
+      AUTOPACK_OUT_DIR: verascan
+      VERACODE_BASELINE_REPO: Veracode-CSE-Demos/veracode-ci-templates
+      VERACODE_BASELINE_BRANCH: main
+      VERACODE_API_KEY_ID: ${{ secrets.VERACODE_API_ID }}
+      VERACODE_API_KEY_SECRET: ${{ secrets.VERACODE_API_KEY }}
+      VERACODE_APP_NAME: ${{ secrets.VERACODE_APP_NAME }}
+
+    steps:
+      # Get source
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Common paths
+      - name: Prepare baseline paths
+        shell: bash
+        run: |
+          set -e
+          REPO_SLUG="$(echo "${{ github.repository }}" | tr '/' '_')"   # owner/name -> owner_name
+          BRANCH="${{ github.ref_name }}"                                # e.g., main
+          echo "REPO_SLUG=$REPO_SLUG" >> "$GITHUB_ENV"
+          echo "BRANCH=$BRANCH"       >> "$GITHUB_ENV"
+          echo "WORK_BASE=baselines/$REPO_SLUG/$BRANCH" >> "$GITHUB_ENV"
+
+      # Veracode CLI for autopackager
+      - name: Install Veracode CLI
+        shell: bash
+        run: |
+          set -e
+          curl -fsS -O https://tools.veracode.com/veracode-cli/install
+          chmod +x ./install
+          ./install | tee install.log
+          CLI_DIR="$(awk -F'"' '/copying files into/ {print $2; exit}' install.log)"
+          [ -n "$CLI_DIR" ] || { echo "CLI_DIR not found in install.log"; exit 1; }
+          echo "CLI_DIR=$CLI_DIR" >> "$GITHUB_ENV"
+          echo "$CLI_DIR"         >> "$GITHUB_PATH"
+          export PATH="$CLI_DIR:$PATH"
+          mkdir -p "$HOME/.veracode"; : > "$HOME/.veracode/veracode.yml"
+          veracode version
+
+      # Autopackage repo into ./verascan
+      - name: Autopackage repository
+        shell: bash
+        run: |
+          set -e
+          export PATH="$CLI_DIR:$PATH"
+          mkdir -p "$AUTOPACK_OUT_DIR"
+          veracode package --source . --output "$AUTOPACK_OUT_DIR" --trust
+          echo "Packaged files in $AUTOPACK_OUT_DIR:"; ls -lh "$AUTOPACK_OUT_DIR" || true
+
+      # Collect artifacts (top-level)
+      - name: Discover packaged artifacts
+        id: discover
+        shell: bash
+        run: |
+          set -e
+          exts="jar war ear dll exe nupkg zip tar tgz tar.gz"
+          files=()
+          for ext in $exts; do
+            for f in "$AUTOPACK_OUT_DIR"/*.$ext; do
+              [ -f "$f" ] && files+=("$f")
+            done
+          done
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No artifacts found in $AUTOPACK_OUT_DIR"
+            exit 1
+          fi
+          printf '%s\n' "${files[@]}" > artifacts_list.txt
+          echo "Found ${#files[@]} artifact(s):"
+          printf ' - %s\n' "${files[@]}"
+
+      # Pipeline Scanner jar
+      - name: Download Veracode Pipeline Scanner
+        shell: bash
+        run: |
+          set -e
+          wget -q https://downloads.veracode.com/securityscan/pipeline-scan-LATEST.zip
+          unzip -n pipeline-scan-LATEST.zip
+
+      # Mitigation helper (requirements + script)
+      - name: Prepare mitigation overlay helper
+        shell: bash
+        run: |
+          set -e
+          pip3 install -q -r https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/requirements.txt
+          wget -q https://raw.githubusercontent.com/tjarrettveracode/veracode-pipeline-mitigation/master/vcpipemit.py -O vcpipemit.py
+          echo "VCPIPESCRIPT=$GITHUB_WORKSPACE/vcpipemit.py" >> "$GITHUB_ENV"
+
+      # Create baseline files
+      - name: Create baselines
+        shell: bash
+        env:
+          BASELINE_FILENAME: baseline.json
+          MITIGATED_FILENAME: baseline-mitigated-findings.json
+        run: |
+          set -e
+
+          REPO_SLUG="$(echo "${{ github.repository }}" | tr '/' '_')"
+          BRANCH="${{ github.ref_name }}"
+          BASE_DIR="$WORK_BASE"
+
+          mkdir -p "$BASE_DIR"
+
+          baselined=0
+          mitigated=0
+          errors=0
+
+          export VERACODE_API_KEY_ID="${{ secrets.VERACODE_API_ID }}"
+          export VERACODE_API_KEY_SECRET="${{ secrets.VERACODE_API_KEY }}"
+
+          total_artifacts=$(wc -l < artifacts_list.txt | tr -d ' ')
+          echo "Artifacts to process: ${total_artifacts}"
+
+          while IFS= read -r artifact; do
+            [[ -z "$artifact" ]] && continue
+
+            name="$(basename "$artifact")"
+            safe="${name//[^A-Za-z0-9_.-]/_}"
+            TARGET_DIR="${BASE_DIR}/${safe}"
+            RAW_PATH="${TARGET_DIR}/${BASELINE_FILENAME}"
+            MITIGATED_PATH="${TARGET_DIR}/${MITIGATED_FILENAME}"
+
+            echo
+            echo "---------------------------------------------"
+            echo "Baseline for: $name"
+            echo "Output dir:   $TARGET_DIR"
+            echo "---------------------------------------------"
+
+            mkdir -p "$TARGET_DIR"
+            rm -f results.json "$RAW_PATH" "$MITIGATED_PATH"
+
+            # Run scan -> results.json in CWD, then move it
+            set +e
+            java -jar pipeline-scan.jar \
+              --veracode_api_id  "${{ secrets.VERACODE_API_ID }}" \
+              --veracode_api_key "${{ secrets.VERACODE_API_KEY }}" \
+              --file             "$artifact" \
+              --issue_details    true \
+              --json_output      true \
+              --fail_on_severity ""
+            rc_scan=$?
+            set -e
+
+            if [ ! -f results.json ]; then
+              echo "::warning file=${safe}::Scan did not produce results.json (rc=${rc_scan}); counting error and continuing."
+              errors=$((errors+1))
+              echo "Running totals → baselined: ${baselined}, mitigated: ${mitigated}, errors: ${errors}"
+              continue
+            fi
+
+            mv results.json "$RAW_PATH"
+            echo "Saved $RAW_PATH"
+            baselined=$((baselined+1))
+
+            # Mitigation-aware baseline
+            (
+              set -e
+              cd "$TARGET_DIR"
+              set +e
+              python3 "$VCPIPESCRIPT" \
+                --results "$BASELINE_FILENAME" \
+                --applicationname "${{ secrets.VERACODE_APP_NAME }}"
+              rc_mitig=$?
+              set -e
+
+              candidate="$(ls -t baseline-*.json 2>/dev/null | head -n1 || true)"
+              if [ $rc_mitig -ne 0 ] || [ -z "$candidate" ] || [ ! -f "$candidate" ]; then
+                echo "::warning file=${safe}::Mitigation step failed or produced no file; continuing."
+                exit 0
+              fi
+
+              mv -f "$candidate" "$MITIGATED_FILENAME"
+              echo "Saved ${TARGET_DIR}/${MITIGATED_FILENAME}"
+            )
+
+            if [ -f "$MITIGATED_PATH" ]; then
+              mitigated=$((mitigated+1))
+            else
+              errors=$((errors+1))
+            fi
+
+            echo "Running totals → baselined: ${baselined}, mitigated: ${mitigated}, errors: ${errors}"
+
+          done < artifacts_list.txt
+
+          {
+            echo "## Baseline Creation Summary"
+            echo
+            echo "| Metric | Count |"
+            echo "|---|---:|"
+            echo "| Artifacts discovered | ${total_artifacts} |"
+            echo "| Artifacts baselined  | ${baselined} |"
+            echo "| Mitigated baselines  | ${mitigated} |"
+            echo "| Artifacts with errors| ${errors} |"
+            echo
+            echo "_Non-fatal: the job never fails on artifact errors._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      # Push baselines/<repo>/<branch> to shared repo
+      - name: Commit baselines to shared repo
+        env:
+          CI_PUSH_TOKEN_VCT: ${{ secrets.CI_PUSH_TOKEN_VCT }}
+        shell: bash
+        run: |
+          set -e
+          git config --global user.email "veracode-bot@github"
+          git config --global user.name  "Veracode Bot"
+
+          git clone "https://${CI_PUSH_TOKEN_VCT}@github.com/${VERACODE_BASELINE_REPO}" repo
+          cd repo
+          git checkout "${VERACODE_BASELINE_BRANCH}" || git checkout -b "${VERACODE_BASELINE_BRANCH}"
+
+          mkdir -p "$WORK_BASE"
+          if [ -d "../$WORK_BASE" ]; then
+            cp -r "../$WORK_BASE/." "$WORK_BASE/"
+          else
+            echo "No baseline files to copy."
+          fi
+
+          git add "$WORK_BASE"
+          git commit -m "Create baselines for ${REPO_SLUG}:${BRANCH} [skip ci]" || echo "No changes"
+          git push origin "${VERACODE_BASELINE_BRANCH}" || echo "No updates"
