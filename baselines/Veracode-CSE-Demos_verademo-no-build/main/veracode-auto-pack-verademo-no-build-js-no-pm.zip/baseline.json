@@ -4,13 +4,13 @@
       "href": "/"
     },
     "self": {
-      "href": "/scans/bfa6bf70-48dc-47ba-b071-f0717c5f49d7/findings"
+      "href": "/scans/f962d7c8-ac37-4562-95b6-7ec40786dd74/findings"
     },
     "help": {
       "href": "https://docs.veracode.com/"
     }
   },
-  "scan_id": "bfa6bf70-48dc-47ba-b071-f0717c5f49d7",
+  "scan_id": "f962d7c8-ac37-4562-95b6-7ec40786dd74",
   "scan_status": "SUCCESS",
   "message": "Scan successful. Results size: 42 bytes",
   "modules": [
