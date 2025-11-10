@@ -1,4 +1,4 @@
-2025-11-03 03:18:22,246 - INFO - get_app_findings - Getting findings for application ed4de30c-1374-47cc-bade-a2cc84f10fc2
-2025-11-03 03:18:28,035 - INFO - get_app_findings - Got 201 findings for app guid ed4de30c-1374-47cc-bade-a2cc84f10fc2 and sandbox guid None
-2025-11-03 03:18:28,035 - INFO - get_results_findings - The results file baseline.json contains 0 findings
-2025-11-03 03:18:28,036 - INFO - main - Processed 2 matched findings. See log file for details
+2025-11-10 03:20:04,568 - INFO - get_app_findings - Getting findings for application ed4de30c-1374-47cc-bade-a2cc84f10fc2
+2025-11-10 03:20:11,128 - INFO - get_app_findings - Got 201 findings for app guid ed4de30c-1374-47cc-bade-a2cc84f10fc2 and sandbox guid None
+2025-11-10 03:20:11,128 - INFO - get_results_findings - The results file baseline.json contains 0 findings
+2025-11-10 03:20:11,128 - INFO - main - Processed 2 matched findings. See log file for details
