@@ -98,25 +98,6 @@ The two stored files answer different questions, so pick deliberately.
 
 `baseline_type: both` runs both comparisons and costs one extra scan per artifact.
 
-## What this replaces
-
-The previous version of this repo had three near identical workflows and a defect that made the whole thing a no-op in practice:
-
-- Baselines were written to `baselines/<repo>/${{ github.ref_name }}` and delta scans read from the same expression. A scan on `feature/x` looked for baselines under `feature/x`, which never existed, so every delta scan reported a missing baseline and passed. Both sides now resolve the same baseline branch.
-- On `pull_request`, `github.ref_name` is `<number>/merge`, which pushed baselines into nonsense paths.
-- Baselines were only created manually or on a schedule. They now refresh on every push to the baseline branch.
-- `vcpipemit.py` was invoked and its output guessed with `ls -t baseline-*.json | head -1`. The script has an `--outputfilename` flag, which is now used, and it runs from scratch space so its `vcpipmit.log` no longer gets committed to the store.
-- `baseline.yml`, `delta.yml` and `veracode-delta-mitigated.yml` are gone, replaced by `veracode-pipeline.yml` with a `mode` input.
-
-Other changes worth knowing about:
-
-- Artifacts that disappear from a build no longer leave stale baselines behind. The branch directory is rebuilt on every refresh.
-- Baseline pushes resync against the remote and retry, so several repositories can refresh into the shared store at the same time without clobbering each other.
-- The baseline repo is checked out sparsely, so a store with hundreds of results stays cheap to clone.
-- The job summary reports a severity breakdown per artifact instead of a bare pass or fail count.
-- Secrets never reach a command line, and no user controlled value is interpolated into a shell script.
-- Pull request scans cancel superseded runs. Baseline refreshes never cancel.
-
 ## Repository layout
 
 ```
