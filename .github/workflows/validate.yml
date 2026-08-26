@@ -1,0 +1,50 @@
+name: Validate templates
+
+on:
+  push:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'examples/**'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/**'
+      - 'examples/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Lint workflows
+        run: |
+          set -euo pipefail
+          bash <(curl -fsS https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+      - name: Check helper scripts
+        run: |
+          set -euo pipefail
+          python -m compileall -q scripts
+          mkdir -p /tmp/fixtures
+          printf '{"findings":[{"severity":5,"cwe_id":"78","title":"t","issue_type":"OS Command Injection","files":{"source_file":{"file":"a/B.java","line":7}},"flaw_match":{"flaw_hash":"1"}}]}' \
+            > /tmp/fixtures/results.json
+          printf 'app.jar\tPASSED\t/tmp/fixtures/results.json\n' > /tmp/fixtures/rows.tsv
+          python scripts/pipeline_summary.py --rows /tmp/fixtures/rows.tsv --output -
+          python scripts/results_to_sarif.py --output /tmp/fixtures/out.sarif /tmp/fixtures/results.json
+          python -c "import json,sys; d=json.load(open('/tmp/fixtures/out.sarif')); assert d['runs'][0]['results'], 'no SARIF results'"
+
+      - name: Check stored baselines are valid JSON
+        run: |
+          set -euo pipefail
+          find baselines -name '*.json' -print0 | xargs -0 -r -n1 python -c "import json,sys; json.load(open(sys.argv[1]))"
